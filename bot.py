@@ -1,26 +1,24 @@
-import telegram.ext
+import requests
+from datetime import datetime
+import telebot
+from auth_token import token
 
-Token = "6687531734:AAH8U1ZWLl7AWEEWw4cEr2vdi-NdCIEpJ1s"
+def get_data():
+    req = requests.get("https://yobit.net/api/3/ticker/btc_usd")
+    response = req.json()
+    sell_price = response["btc_usd"]["sell"]
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%H')}\nSell BTC price: {sell_price}")
 
-updater = telegram.ext.Updater("6687531734:AAH8U1ZWLl7AWEEWw4cEr2vdi-NdCIEpJ1s", update_context=True)
+def telegram_bot(token):
+    bot = telebot.TeleBot(token)
 
-dispatcher = updater.dispatcher 
+    @bot.message_handler(commands=["start"])
+    def start_message(message):
+        bot.send_message(message.chat.id,"Добро пожаловать ! Это Украинский телеграм бот крипто оповещений!")
+    
+    bot.polling()
+    
 
-def start(update, context):
-    update.message.reply_text("Welcome to Tradign Alarm - useful bot where you can set alarm on any cryptocurrency that is available on Binance.com")
 
-def help(update, context):
-    update.message.reply_text(
-    #За скобками можешь добавить еще команды
-    """
-    /start - Starts telegram bot  
-    /help - List commands
-    """
-    )
-# Через def добавляешь функцию команде
-
-dispatcher.add_handle(telegram.ext.CommandHandler('/start', start))
-dispatcher.add_handle(telegram.ext.CommandHandler('help', help))
-
-updater.start_polling()
-updater.idle()
+if __name__ == '__main__':
+    telegram_bot(token)
