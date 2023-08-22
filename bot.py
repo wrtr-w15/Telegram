@@ -17,7 +17,7 @@ def get_data():
     response = req.json()
     sell_price = response["eth_usd"]["sell"]
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%H')}\nSell ETH price: {sell_price}")
-    
+
 
 if __name__ == '__main__':
     telegram_bot(token)
