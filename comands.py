@@ -36,10 +36,11 @@ def telegram_bot(token):
          
             except Exception as ex:
                 print(ex)
-                bot.send_message(call.messege.chat.id,"Can not collect information, try again later")
+                bot.send_message(call.message.chat.id,"Can not collect information, try again later")
 
-        else:
-            bot.send_message(call.from_user.id, "wrong comand")
+     
+    
+
             
         if option == "BTC Price":
             try:
@@ -52,30 +53,34 @@ def telegram_bot(token):
                 print(ex)
                 bot.send_message(call.from_user.id,"Can not collect information, try again later")
 
-        else:
-            bot.send_message(call.messege.chat.id, "wrong comand")
+        #elif(option != "ETC Price"):
+            #bot.send_message(call.message.chat.id, "wrong comand")
+
+       
     
 
     #начало других команд
-    @bot.message_handler(commands=["help"])
-    def start_message(message):
-        bot.send_message(message.chat.id,"Help with your problem")
 
-    @bot.message_handler(content_types=["text"])
-    def send_text(message):
-        if message.text.lower() == "price":
-            try:
-                req = requests.get("https://yobit.net/api/3/ticker/btc_usd")
-                response = req.json()
-                sell_price = response["btc_usd"]["sell"]
-                bot.send_message(message.chat.id,f"{datetime.now().strftime('%Y-%m-%d %H:%H')}\nSell BTC price: {sell_price}")
+    #@bot.message_handler(content_types=["text"])
+    #def send_text(message):
+        #if message.text.lower() == "price":
+            #try:
+                #req = requests.get("https://yobit.net/api/3/ticker/btc_usd")
+                #response = req.json()
+                #sell_price = response["btc_usd"]["sell"]
+               # bot.send_message(message.chat.id,f"{datetime.now().strftime('%Y-%m-%d %H:%H')}\nSell BTC price: {sell_price}")
          
-            except Exception as ex:
-                print(ex)
-                bot.send_message(message.chat.id,"Can not collect information, try again later")
+           # except Exception as ex:
+                #print(ex)
+              #  bot.send_message(message.chat.id,"Can not collect information, try again later")
 
-        else:
-            bot.send_message(message.chat.id, "wrong comand")
+       # else:
+            #bot.send_message(message.chat.id, "wrong comand")
+
+
+        @bot.message_handler(commands=["help"])
+        def start_message(message):
+            bot.send_message(message.chat.id,"Help with your problem")
     
     
     bot.polling()
