@@ -3,9 +3,13 @@ import requests
 import yfinance as yf
 import matplotlib.pyplot as plt
 import io
+import schedule
+import time
+import sqlite3
+from telebot import types
 from datetime import datetime
 from auth_token import token
-from menu_options import menu_options, coin_options
+from menu_options import menu_options, coin_options, dailyalert_options , time_options
 
 def telegram_bot(token):
     bot = telebot.TeleBot(token)
@@ -36,12 +40,42 @@ def telegram_bot(token):
 
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin:", reply_markup=markup)
 
+        elif option == "Daily Alert":
+            markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+
+            for daily_alert_option in dailyalert_options:
+                button = telebot.types.InlineKeyboardButton(daily_alert_option, callback_data=daily_alert_option)
+                markup.add(button)
+
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin:", reply_markup=markup)
+            pass
+
+
+    @bot.callback_query_handler(func=lambda call: call.data in dailyalert_options)
+    def handle_daily_alert_option_click(call):
+             daily_alert_option = call.data
+             if daily_alert_option == "BTC":
+              markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+        
+              row_buttons = [telebot.types.InlineKeyboardButton(time_option, callback_data=time_option) for time_option in time_options]
+        
+        # Разбиение кнопок на два столбца
+             for i in range(0, len(row_buttons), 2):
+                      markup.add(row_buttons[i], row_buttons[i+1] if i+1 < len(row_buttons) else None)
+
+                      bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a Time:", reply_markup=markup)
+
+              
+
+        # Добавьте логику для действий при выборе BTC для ежедневных уведомлений
+              ## markup.add(button)
+
     @bot.callback_query_handler(func=lambda call: call.data in coin_options)
     def handle_coin_option_click(call):
         coin_option = call.data
         if coin_option == "BTC Price":
             markup = telebot.types.InlineKeyboardMarkup(row_width=1)
-            time_frames = ["1d", "5d", "1mo", "3mo", "6mo", "1y"]
+            time_frames = ["1 D", "5 D", "1 M", "3 M", "6 M", "1 Y"]
 
             for frame_option in time_frames:
                 button = telebot.types.InlineKeyboardButton(frame_option, callback_data=frame_option)
@@ -53,7 +87,7 @@ def telegram_bot(token):
                 sell_price = response.get("btc_usd", {}).get("sell")
 
                 if sell_price is not None:
-                    message_text = f"BTC Price: {sell_price}"
+                    message_text = f"Choose TimeFrame"
                     bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=message_text, reply_markup=markup)
                 else:
                     bot.send_message(call.from_user.id, "BTC price data not available.")
@@ -61,7 +95,7 @@ def telegram_bot(token):
                 print(f"Error fetching BTC Price: {ex}")
                 bot.send_message(call.from_user.id, "Error fetching BTC Price, please try again later")
 
-    @bot.callback_query_handler(func=lambda call: call.data in ["1d", "5d", "1mo", "3mo", "6mo", "1y"])
+    @bot.callback_query_handler(func=lambda call: call.data in ["1 D", "5 D", "1 M", "3 M", "6 M", "1 Y"])
     def handle_time_frame_click(call):
         time_frame = call.data
         try:
@@ -89,9 +123,9 @@ def telegram_bot(token):
                 f"BTC Price: {btc_data['Close'][-1]:.2f}\n"
                 f"Price Change: {price_change:.2f}\n\n"
                 "```\n"
-                "| Symbol | Price | Change |\n"
-                "|--------|-------|--------|\n"
-                f"| BTC    | {btc_data['Close'][-1]:.2f} | {price_change:.2f} |\n"
+                "| Symbol |   Price   | Change |\n"
+                "|--------|-----------|--------|\n"
+                f"| BTC    | {btc_data['Close'][-1]:.2f}  | {price_change:.2f} |\n"
                 "```"
             )
 
