@@ -6,13 +6,17 @@ import io
 import schedule
 import time
 import sqlite3
+import time
 from telebot import types
 from datetime import datetime
 from auth_token import token
-from menu_options import menu_options, coin_options, dailyalert_options , time_options
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from menu_options import menu_options, coin_options, dailyalert_options , time_options , back_options
 
 def telegram_bot(token):
     bot = telebot.TeleBot(token)
+
 
     @bot.message_handler(commands=["start"])
     def handle_start(message):
@@ -50,25 +54,47 @@ def telegram_bot(token):
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin:", reply_markup=markup)
             pass
 
+    def send_scheduled_message(time_option, chat_id, daily_alert_option):
+        message = f"At {time_option}, you will receive a {daily_alert_option} notification from your bot!"
+        bot.send_message(chat_id, message)
 
+# Обработчик выбора варианта "Daily Alert"
     @bot.callback_query_handler(func=lambda call: call.data in dailyalert_options)
     def handle_daily_alert_option_click(call):
-             daily_alert_option = call.data
-             if daily_alert_option == "BTC":
-              markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-        
-              row_buttons = [telebot.types.InlineKeyboardButton(time_option, callback_data=time_option) for time_option in time_options]
-        
-        # Разбиение кнопок на два столбца
-             for i in range(0, len(row_buttons), 2):
-                      markup.add(row_buttons[i], row_buttons[i+1] if i+1 < len(row_buttons) else None)
+        daily_alert_option = call.data
+        chat_id = call.message.chat.id
 
-                      bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a Time:", reply_markup=markup)
+        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+        row_buttons = [telebot.types.InlineKeyboardButton(time_option, callback_data=f"{daily_alert_option}:{time_option}") for time_option in time_options]
 
-              
+        for i in range(0, len(row_buttons), 2):
+            markup.add(row_buttons[i], row_buttons[i+1] if i+1 < len(row_buttons) else None)
 
-        # Добавьте логику для действий при выборе BTC для ежедневных уведомлений
-              ## markup.add(button)
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="Choose a Time:", reply_markup=markup)
+
+# Обработчик выбора времени
+    @bot.callback_query_handler(func=lambda call: call.data in [f"{option}:{time_option}" for option in dailyalert_options for time_option in time_options])
+    def handle_time_option_click(call):
+        full_data = call.data.split(":")
+        daily_alert_option = full_data[0]
+        time_option = full_data[1]
+        chat_id = call.message.chat.id
+    
+        markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+        back_button = telebot.types.InlineKeyboardButton("Back", callback_data="Back")
+        markup.add(back_button)
+    
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f"You selected: {daily_alert_option}, {time_option}\n\nChoose an option:", reply_markup=markup)
+
+
+
+# Обработчик нажатия кнопки "Back"
+    @bot.callback_query_handler(func=lambda call: call.data == "Back")
+    def handle_button_click(call):
+        if call.data == "Back":
+            bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+            handle_start(call.message)
+
 
     @bot.callback_query_handler(func=lambda call: call.data in coin_options)
     def handle_coin_option_click(call):
