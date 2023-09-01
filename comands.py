@@ -3,21 +3,28 @@ import requests
 import yfinance as yf
 import matplotlib.pyplot as plt
 import io
-import schedule
-import time
-import sqlite3
-import time
+import datetime
+from threading import Thread
 from telebot import types
 from datetime import datetime
 from auth_token import token
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from telegram.ext import Updater, CommandHandler
 from menu_options import menu_options, coin_options, dailyalert_options , time_options , back_options
 
 def telegram_bot(token):
     bot = telebot.TeleBot(token)
 
 
+    # Запуск планировщика,+ в отдельном потоке (нужно для daily alert)
+    scheduler = BackgroundScheduler()
+    def run_scheduler():
+        scheduler.start()
+    scheduler_thread = Thread(target=run_scheduler)
+    scheduler_thread.start()
+
+    # Обработчик Команды Start 
     @bot.message_handler(commands=["start"])
     def handle_start(message):
         markup = telebot.types.InlineKeyboardMarkup(row_width=2)  # Set row_width to 2
@@ -29,40 +36,53 @@ def telegram_bot(token):
         markup.add(*row1_buttons)  # Add buttons from the first row
         markup.add(*row2_buttons)  # Add buttons from the second row
 
-        bot.send_message(message.chat.id, "Welcome to Trading Alarm bot - a useful tool for every trader. Choose from the following commands:", reply_markup=markup)
+        bot.send_message(message.chat.id, "Привет👋\n\n\nЯ, Treiding Alarm - бот, который поможет тебе отслеживать курс криптовалют, просматривать график цены и устанавливать оповещения при достижении монетой желаемой цены. \n\n\nДавай посмотрим, что там👇", reply_markup=markup)
 
 
+
+    # Обработчик Главного Меню 
     @bot.callback_query_handler(func=lambda call: call.data in menu_options)
     def handle_button_click(call):
         option = call.data
-        if option == "Sell Price":
+        if option == "🪙Sell Price":
             markup = telebot.types.InlineKeyboardMarkup(row_width=1)
 
             for coin_option in coin_options:
                 button = telebot.types.InlineKeyboardButton(coin_option, callback_data=coin_option)
                 markup.add(button)
 
-            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin:", reply_markup=markup)
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin :", reply_markup=markup)
 
-        elif option == "Daily Alert":
+        elif option == "🛎Daily Alert":
             markup = telebot.types.InlineKeyboardMarkup(row_width=1)
 
             for daily_alert_option in dailyalert_options:
                 button = telebot.types.InlineKeyboardButton(daily_alert_option, callback_data=daily_alert_option)
                 markup.add(button)
 
-            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin:", reply_markup=markup)
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберете название криптовалюты!💰\n\nДля возврата в главное меню \n\nВыберете Back 📃", reply_markup=markup)
+            pass
+        elif option == "🔧Help":
+            markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+            for back_option in back_options:
+                button = telebot.types.InlineKeyboardButton(back_option, callback_data=back_option)
+                markup.add(button)
+
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                   text="⚙️Help⚙️\n\n➡️Sell Price:\nНажми на интересующую монету\nи ты увидишь её актуальную цену\nграфик изменения цены за нужный период времени.\n\n\n➡️Daily ALert:\nПри выборе монеты ты можешь указать цену\nпри достижении которой я буду оповещать тебя.\n\n\n➡️Coin Alert:\nПри выборе монеты ты можешь выбрать время\nв которое я буду оповещать тебя о её текущей цене.\n\n\n➡️Conversion:\nТут вы можете узнать курс обмена криптовалют\n\n\n\n➡️ Для возврата в главное меню\nВыберете Back 📃", 
+                                   reply_markup=markup)
+            
             pass
 
-    def send_scheduled_message(time_option, chat_id, daily_alert_option):
-        message = f"At {time_option}, you will receive a {daily_alert_option} notification from your bot!"
-        bot.send_message(chat_id, message)
-
-# Обработчик выбора варианта "Daily Alert"
+    # Обработчик выбора варианта "Daily Alert"
     @bot.callback_query_handler(func=lambda call: call.data in dailyalert_options)
     def handle_daily_alert_option_click(call):
         daily_alert_option = call.data
         chat_id = call.message.chat.id
+        if daily_alert_option == "Back":
+            handle_button_click(call)
+            return
+        else:pass
 
         markup = telebot.types.InlineKeyboardMarkup(row_width=2)
         row_buttons = [telebot.types.InlineKeyboardButton(time_option, callback_data=f"{daily_alert_option}:{time_option}") for time_option in time_options]
@@ -70,32 +90,61 @@ def telegram_bot(token):
         for i in range(0, len(row_buttons), 2):
             markup.add(row_buttons[i], row_buttons[i+1] if i+1 < len(row_buttons) else None)
 
-        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="Choose a Time:", reply_markup=markup)
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="Выберете время ⏰\n\nВ это время вы получите уведомление!💰\n\nДля возврата в главное меню \n\nВыберете Back 📃", reply_markup=markup)
 
-# Обработчик выбора времени
+        # Запланировать задачу на отправку сообщения в выбранное время
+        for time_option in time_options:
+            hour, minute = map(int, time_option.split('-'))
+            scheduler.add_job(
+                send_scheduled_message,
+                trigger=CronTrigger(hour=hour, minute=minute),
+                args=(time_option, chat_id, daily_alert_option),
+            )
+    
+    # Обработчик выбора времени
     @bot.callback_query_handler(func=lambda call: call.data in [f"{option}:{time_option}" for option in dailyalert_options for time_option in time_options])
-    def handle_time_option_click(call):
+    def handle_time_option_click(call): 
+         
         full_data = call.data.split(":")
         daily_alert_option = full_data[0]
         time_option = full_data[1]
         chat_id = call.message.chat.id
-    
+        now = datetime.now().strftime("%H-%M")
         markup = telebot.types.InlineKeyboardMarkup(row_width=1)
         back_button = telebot.types.InlineKeyboardButton("Back", callback_data="Back")
         markup.add(back_button)
     
-        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f"You selected: {daily_alert_option}, {time_option}\n\nChoose an option:", reply_markup=markup)
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f"✅Готово!\n\n\n💰Монета ➙ {daily_alert_option}\n\n⏰Время сейчас ➙ {now}\n\n⏳Время уведомления ➙ {time_option}\n\nДля возврата в главное меню \nВыберете Back 📃", reply_markup=markup)
+
+    
+
+    # Отправка сообщений (цены криптоволюты) в выбраное время 
+    def send_scheduled_message(time_option, chat_id, daily_alert_option):
+        try:
+            url = f"https://yobit.net/api/3/ticker/{daily_alert_option}_usd"
+            req = requests.get(url)
+            response = req.json()
+            price = response.get(f"{daily_alert_option}_usd", {}).get("sell")   
+        except Exception as ex:
+                print(f"Error fetching BTC Price: {ex}")
+                bot.send_message("Error fetching BTC Price, please try again later")
 
 
+        now = datetime.now().strftime("%H-%M") 
+        message = f"⌛Daily Alert\n\n\n⏰Время сейчас ➙ {now}\n\n🪙Монета ➙ {daily_alert_option}\n\n💸Цена ➙ {price}"     
+        bot.send_message(chat_id, message)
 
-# Обработчик нажатия кнопки "Back"
+    
+
+    # Обработчик нажатия кнопки "Back"
     @bot.callback_query_handler(func=lambda call: call.data == "Back")
     def handle_button_click(call):
         if call.data == "Back":
             bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
             handle_start(call.message)
-
-
+        
+        
+    # Отправка цены криптоволюты 
     @bot.callback_query_handler(func=lambda call: call.data in coin_options)
     def handle_coin_option_click(call):
         coin_option = call.data
