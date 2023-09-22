@@ -4,6 +4,8 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import io
 import datetime
+import time
+import threading
 from threading import Thread
 from telebot import types
 from datetime import datetime
@@ -12,10 +14,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from functools import partial
 from telegram.ext import Updater, CommandHandler
-from menu_options import menu_options, coin_options, dailyalert_options , time_options , back_options,convert_options1
+from menu_options import menu_options, coin_options, dailyalert_options , time_options , back_options, coin_alert_options, alert_options,convert_options1
 
 def telegram_bot(token):
     bot = telebot.TeleBot(token)
+    coin_manual_alert = None
     printy = bot.send_message
     
     edity = bot.edit_message_text
@@ -75,7 +78,6 @@ def telegram_bot(token):
 
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберете название криптовалюты!💰\n\nДля возврата в главное меню \n\nВыберете Back 📃", reply_markup=markup)
             pass
-
         elif option == "📊Conversion":
             markup = telebot.types.InlineKeyboardMarkup(row_width=1)
             for convert_option1 in convert_options1:
@@ -88,12 +90,22 @@ def telegram_bot(token):
             
             pass
 
+
+        elif option == "⏰Coin Alert":
+            markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+
+            for alert_option in alert_options:
+                button = telebot.types.InlineKeyboardButton(alert_option, callback_data=alert_option)
+                markup.add(button)
+
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Choose a coin alert:", reply_markup=markup)
+            
         elif option == "🔧Help":
             markup = telebot.types.InlineKeyboardMarkup(row_width=1)
             for back_option in back_options:
                 button = telebot.types.InlineKeyboardButton(back_option, callback_data=back_option)
                 markup.add(button)
-
+            
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                                    text="⚙️Help⚙️\n\n➡️Sell Price:\nНажми на интересующую монету\nи ты увидишь её актуальную цену\nграфик изменения цены за нужный период времени.\n\n\n➡️Daily ALert:\nПри выборе монеты ты можешь указать цену\nпри достижении которой я буду оповещать тебя.\n\n\n➡️Coin Alert:\nПри выборе монеты ты можешь выбрать время\nв которое я буду оповещать тебя о её текущей цене.\n\n\n➡️Conversion:\nТут вы можете узнать курс обмена криптовалют\n\n\n\n➡️ Для возврата в главное меню\nВыберете Back 📃", 
                                    reply_markup=markup)
@@ -301,10 +313,100 @@ def telegram_bot(token):
         for time_option in time_options:
             hour, minute = map(int, time_option.split('-'))
             scheduler.add_job(
-                send_scheduled_message,trigger=CronTrigger(hour=hour, minute=minute),args=(time_option, chat_id, daily_alert_option),)
+                send_scheduled_message,
+                trigger=CronTrigger(hour=hour, minute=minute),
+                args=(time_option, chat_id, daily_alert_option),
+            )
 
+    coin_alert_options = {}
+    notified_users = {}
+
+    
+    @bot.callback_query_handler(func=lambda call: call.data =="Manual")
+    def coin_alert_manual_input_callback(call):
+        global coin_manual_alert
+        chat_id = call.message.chat.id
+        user_id = call.from_user.id
+        bot.send_message(chat_id, "Введите желаемую монеты\n\nнапример, btc:")
+        bot.register_next_step_handler(call.message, coin_alert_manual_callback)
+        
+    def coin_alert_manual_callback(message):
+        global coin_manual_alert
+        coin_manual_alert = message.text.strip()
+        coin_manual_alert = coin_manual_alert.lower()
+        chat_id = message.chat.id
+        user_id = message.from_user.id
+        bot.send_message(chat_id, "Введите желаемую цену для монеты\n\nнапример, 30000:")
+        bot.register_next_step_handler(message, set_desired_price)
+     
+
+    def set_desired_price(message):
+        global coin_manual_alert
+        chat_id = message.chat.id
+        user_id = message.from_user.id
+        desired_price = message.text.strip()
+
+        try:
+            desired_price = float(desired_price)
+
+        # Сохранение желаемой цены для пользователя
+            coin_alert_options[user_id] = desired_price
+
+            bot.send_message(chat_id, f"Вы будете уведомлены, когда цена достигнет {desired_price}$")
+        except ValueError:
+            bot.send_message(chat_id, "Пожалуйста, введите числовое значение цены\n\nнапример, 30000.")
+
+    def check_price():
+        global coin_manual_alert
+        
+        while True:
+            
+            for user_id, desired_price in coin_alert_options.items():
+                url = f"https://yobit.net/api/3/ticker/{coin_manual_alert}_usdt"  
+                try:
+                    req = requests.get(url)
+                    req.raise_for_status()  # Проверка статуса запроса
+
+                    response = req.json()
+                    price = response.get(f"{coin_manual_alert}_usdt", {}).get("sell")
+
+                    if price is not None and isinstance(price, (int, float)):
+                        if abs(price - desired_price) < 0.0001:
+                            if user_id not in notified_users or not notified_users[user_id]:
+                                message_text = f"{coin_manual_alert} на продажу достиг {price}$"
+                                bot.send_message(user_id, message_text)
+                                print(f"Sent notification to user {user_id}: {message_text}")
+                                notified_users[user_id] = True  # Отмечаем, что уведомление было отправлено
+                        else:
+                        # Сбрасываем флаг уведомления, если цена больше не соответствует условиям
+                            notified_users[user_id] = False
+                            print(f"Price for user {user_id}: {price}, Desired price: {desired_price}")
+                    else:
+                        print(f"Invalid or empty price data received from Yobit API")
+                except requests.exceptions.RequestException as e:
+                # Обработка ошибок при запросе к API (например, нет интернет-соединения или проблемы с URL)
+                    print(f"Request error: {e}")        
+                
+            time.sleep(20) 
+
+    check_price_thread = threading.Thread(target=check_price)
+    check_price_thread.start()          
+
+    @bot.callback_query_handler(func=lambda call: call.data in ["Back"])
+    def handle_button_click(call):
+        coin_alert_option = call.data
+        chat_id = call.message.chat.id
+        if coin_alert_option == "Back":
+            handle_button_click(call)
+            return
+        pass
+
+
+
+    # Обработчик выбора времени
     @bot.callback_query_handler(func=lambda call: call.data in [f"{option}:{time_option}" for option in dailyalert_options for time_option in time_options])
     def handle_time_option_click(call):
+        coin_alert_option = call.data
 
         now = datetime.now().strftime("%H-%M")
         chat_id = call.message.chat.id
@@ -315,14 +417,9 @@ def telegram_bot(token):
         markup = telebot.types.InlineKeyboardMarkup(row_width=1)
         back_button = telebot.types.InlineKeyboardButton("Back", callback_data="Back")
         markup.add(back_button)
-
-        edity(
-            chat_id=chat_id,
-            message_id=call.message.message_id,
-            text=f"✅Готово!\n\n\n💰Монета ➙ {daily_alert_option}\n\n⏰Время сейчас ➙ {now}\n\n⏳Время уведомления ➙ {time_option}\n\nДля возврата в главное меню \nВыберете Back 📃",
-            reply_markup=markup
-        )
     
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f"✅Готово!\n\n\n💰Монета ➙ {daily_alert_option}\n\n⏰Время сейчас ➙ {now}\n\n⏳Время уведомления ➙ {time_option}\n\nДля возврата в главное меню \nВыберете Back 📃", reply_markup=markup)  
+
     # Отправка сообщений (цены криптоволюты) в выбраное время 
     def send_scheduled_message(time_option, chat_id, daily_alert_option):
         try:
@@ -337,7 +434,7 @@ def telegram_bot(token):
 
         now = datetime.now().strftime("%H-%M") 
         message = f"⌛Daily Alert\n\n\n⏰Время сейчас ➙ {now}\n\n🪙Монета ➙ {daily_alert_option}\n\n💸Цена ➙ {price}"     
-        printy(chat_id, message)
+        bot.send_message(chat_id, message)
 
     # Обработчик нажатия кнопки "Back"
     @bot.callback_query_handler(func=lambda call: call.data == "Back")
@@ -345,7 +442,7 @@ def telegram_bot(token):
         if call.data == "Back":
             bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
             handle_start(call.message)
-              
+           
     # Отправка цены криптоволюты 
     @bot.callback_query_handler(func=lambda call: call.data in coin_options)
     def handle_coin_option_click(call):

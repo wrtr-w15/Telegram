@@ -10,7 +10,10 @@ coin_options = [
     "BTC Price",
     "ETH Price"
 ]
-
+alert_options = [
+    "Manual",
+    "Back"
+]
 convert_options1 = [
     "Price",
     "Quantity",
@@ -53,3 +56,6 @@ time_options = [
 back_options = [
     "Back"
 ]
+
+
+
