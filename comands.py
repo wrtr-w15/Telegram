@@ -17,6 +17,7 @@ from menu_options import menu_options, coin_options, dailyalert_options , time_o
 def telegram_bot(token):
     bot = telebot.TeleBot(token)
     printy = bot.send_message
+    
     edity = bot.edit_message_text
     coin1 = None
     coin2 = None
