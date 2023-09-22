@@ -10,7 +10,10 @@ coin_options = [
     "BTC Price",
     "ETH Price"
 ]
-
+alert_options = [
+    "Manual",
+    "Back"
+]
 dailyalert_options = [
     "btc",
     "eth",
@@ -53,5 +56,8 @@ back_options = [
     "Back"
 ]
 
-
+coin_alert_options = [
+    "BTC Actual Price"
+    "ETH Actual Price"
+]
 
