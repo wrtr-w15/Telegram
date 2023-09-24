@@ -7,9 +7,15 @@ menu_options = [
 ]
 
 coin_options = [
-    "BTC Price",
-    "ETH Price"
+    "BTC-USD",
+    "ETH-USD",
+    "BNB-USD",
+    "SOL-USD",
+    "MATIC-USD",
+    "XRP-USD",
+    "Back"
 ]
+
 alert_options = [
     "Manual",
     "Back"
